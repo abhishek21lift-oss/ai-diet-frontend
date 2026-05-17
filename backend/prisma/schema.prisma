@@ -1,0 +1,313 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// ENUMS
+// ─────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  TRAINER
+  CLIENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum BodyType {
+  ECTOMORPH
+  MESOMORPH
+  ENDOMORPH
+}
+
+enum ActivityLevel {
+  SEDENTARY
+  LIGHTLY_ACTIVE
+  MODERATELY_ACTIVE
+  VERY_ACTIVE
+  EXTRA_ACTIVE
+}
+
+enum FitnessGoal {
+  FAT_LOSS
+  MUSCLE_GAIN
+  MAINTENANCE
+  BODY_RECOMPOSITION
+}
+
+enum DietType {
+  VEG
+  VEGAN
+  NON_VEG
+  JAIN
+}
+
+enum WorkoutExperience {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+// ─────────────────────────────────────────────
+// USER / AUTH
+// ─────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(TRAINER)
+  isActive     Boolean  @default(true)
+  refreshToken String?
+  lastLogin    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  trainer Trainer?
+  client  Client?
+
+  @@index([email])
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// TRAINER
+// ─────────────────────────────────────────────
+
+model Trainer {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName      String
+  mobile        String?
+  gymName       String?
+  certification String?
+  bio           String?
+  avatarUrl     String?
+  clients       Client[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("trainers")
+}
+
+// ─────────────────────────────────────────────
+// CLIENT
+// ─────────────────────────────────────────────
+
+model Client {
+  id        String   @id @default(cuid())
+  userId    String?  @unique
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  trainerId String
+  trainer   Trainer  @relation(fields: [trainerId], references: [id], onDelete: Cascade)
+
+  // Personal Info
+  fullName    String
+  mobile      String
+  email       String
+  gender      Gender
+  dateOfBirth DateTime
+  age         Int
+
+  // Body Metrics
+  heightCm   Float
+  weightKg   Float
+  bodyFatPct Float?
+  bodyType   BodyType
+
+  // Lifestyle
+  activityLevel     ActivityLevel
+  sleepHours        Float
+  waterIntakeLtr    Float
+  workoutExperience WorkoutExperience
+
+  // Goal
+  fitnessGoal FitnessGoal
+
+  // Nutrition Preferences
+  dietType     DietType
+  allergies    String[]
+  foodsToAvoid String[]
+
+  // Medical
+  medicalConditions String[]
+  injuries          String[]
+  medications       String[]
+
+  // Notes
+  notes String?
+
+  // Calculated Metrics (auto-updated on save)
+  bmi           Float?
+  bmr           Float?
+  tdee          Float?
+  dailyCalories Float?
+  proteinGrams  Float?
+  carbsGrams    Float?
+  fatsGrams     Float?
+
+  // Status
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  dietPlans       DietPlan[]
+  progressRecords ProgressRecord[]
+  checkIns        WeeklyCheckIn[]
+  weightHistory   WeightHistory[]
+  progressPhotos  ProgressPhoto[]
+
+  @@index([trainerId])
+  @@index([email])
+  @@map("clients")
+}
+
+// ─────────────────────────────────────────────
+// DIET PLAN
+// ─────────────────────────────────────────────
+
+model DietPlan {
+  id       String  @id @default(cuid())
+  clientId String
+  client   Client  @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  planName  String
+  startDate DateTime
+  endDate   DateTime?
+  isActive  Boolean   @default(true)
+
+  totalCalories Float
+  proteinGrams  Float
+  carbsGrams    Float
+  fatsGrams     Float
+
+  aiGenerated   Boolean @default(false)
+  aiModel       String?
+  promptUsed    String? @db.Text
+  planSummary   String? @db.Text
+  trainerNotes  String? @db.Text
+  hydrationTips String?
+
+  supplementSuggestions String[]
+  meals                 Meal[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+  @@map("diet_plans")
+}
+
+model Meal {
+  id         String   @id @default(cuid())
+  dietPlanId String
+  dietPlan   DietPlan @relation(fields: [dietPlanId], references: [id], onDelete: Cascade)
+
+  mealName     String
+  mealTime     String
+  calories     Float
+  proteinGrams Float
+  carbsGrams   Float
+  fatsGrams    Float
+  sortOrder    Int    @default(0)
+
+  foods MealFood[]
+
+  @@map("meals")
+}
+
+model MealFood {
+  id     String @id @default(cuid())
+  mealId String
+  meal   Meal   @relation(fields: [mealId], references: [id], onDelete: Cascade)
+
+  foodName     String
+  quantity     String
+  calories     Float
+  protein      Float
+  carbs        Float
+  fats         Float
+  alternatives String[]
+
+  @@map("meal_foods")
+}
+
+// ─────────────────────────────────────────────
+// PROGRESS TRACKING
+// ─────────────────────────────────────────────
+
+model ProgressRecord {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  recordedAt DateTime @default(now())
+  weightKg   Float
+  bodyFatPct Float?
+  chestCm    Float?
+  waistCm    Float?
+  hipCm      Float?
+  armCm      Float?
+  thighCm    Float?
+  calfCm     Float?
+  notes      String?
+
+  @@index([clientId])
+  @@index([recordedAt])
+  @@map("progress_records")
+}
+
+model WeightHistory {
+  id         String   @id @default(cuid())
+  clientId   String
+  client     Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  weightKg   Float
+  recordedAt DateTime @default(now())
+
+  @@index([clientId])
+  @@map("weight_history")
+}
+
+model WeeklyCheckIn {
+  id         String @id @default(cuid())
+  clientId   String
+  client     Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  weekNumber        Int
+  year              Int
+  compliance        Int
+  workoutsCompleted Int
+  energyLevel       Int
+  sleepQuality      Int
+  stressLevel       Int?
+  notes             String?
+
+  createdAt DateTime @default(now())
+
+  @@index([clientId])
+  @@map("weekly_checkins")
+}
+
+model ProgressPhoto {
+  id       String @id @default(cuid())
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  photoUrl  String
+  s3Key     String
+  photoType String
+  takenAt   DateTime @default(now())
+
+  @@index([clientId])
+  @@map("progress_photos")
+}
