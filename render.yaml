@@ -1,0 +1,60 @@
+# render.yaml — Deploy to Render.com
+# Run: render deploy (after linking GitHub repo)
+
+services:
+  # ── Backend API ──────────────────────────────────
+  - type: web
+    name: fitness-619-api
+    env: node
+    region: singapore
+    plan: free
+    rootDir: backend
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npx prisma migrate deploy && node dist/server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: fitness-619-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: ANTHROPIC_API_KEY
+        sync: false   # Set manually in dashboard
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_REGION
+        value: ap-south-1
+      - key: AWS_S3_BUCKET
+        value: 619-fitness-uploads
+      - key: ALLOWED_ORIGINS
+        value: https://fitness-619-frontend.onrender.com
+
+  # ── Frontend (Static Site) ───────────────────────
+  - type: web
+    name: fitness-619-frontend
+    env: static
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_URL
+        value: https://fitness-619-api.onrender.com
+
+# ── Database ─────────────────────────────────────────
+databases:
+  - name: fitness-619-db
+    databaseName: fitness_619
+    user: fitness_user
+    region: singapore
+    plan: free
